@@ -13,11 +13,10 @@ from aiogram.filters import Command
 from aiogram.types import Message
 
 # --- Конфиг ---
-# 👇 ТОКЕН ВСТАВЛЕН СЮДА 👇
 BOT_TOKEN = os.getenv("BOT_TOKEN", "1780243260:JsuCWrdBDfMjPxmH2JRVNZ9hREvWYzDZ0fe")
 API_BASE = os.getenv("API_BASE", "https://misugram.cloud-ip.cc")
 
-# --- Flask для Render (чтобы сервис не засыпал) ---
+# --- Flask для Render ---
 app = Flask(__name__)
 
 @app.route('/')
@@ -29,10 +28,8 @@ def run_flask():
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
 
-# --- Подключение к кастомному шлюзу ---
-session = AiohttpSession(
-    api=TelegramAPIServer.from_base(API_BASE)
-)
+# --- Подключение к шлюзу ---
+session = AiohttpSession(api=TelegramAPIServer.from_base(API_BASE))
 bot = Bot(token=BOT_TOKEN, session=session)
 dp = Dispatcher()
 
@@ -59,20 +56,26 @@ async def cmd_nahui(message: Message):
     name = message.from_user.first_name or "друг"
     await message.reply(random.choice(PHRASES).format(name=name))
 
+# --- РАБОТА В ЧАТАХ ---
 @dp.message(F.text, F.chat.type.in_({ChatType.GROUP, ChatType.SUPERGROUP}))
 async def group_text(message: Message):
     bot_username = (await bot.me()).username
+    # Проверяем, упомянули ли бота или ответили на его сообщение
     is_mention = f"@{bot_username}" in (message.text or "")
     is_reply_to_bot = (
         message.reply_to_message is not None
         and message.reply_to_message.from_user is not None
         and message.reply_to_message.from_user.id == (await bot.me()).id
     )
+    
+    # Если бот не упомянут и это не ответ ему — молчим, чтобы не спамить
     if not (is_mention or is_reply_to_bot):
         return
+        
     name = message.from_user.first_name or "друг"
     await message.reply(random.choice(PHRASES).format(name=name))
 
+# --- РАБОТА В ЛИЧКЕ ---
 @dp.message(F.text, F.chat.type == ChatType.PRIVATE)
 async def private_text(message: Message):
     name = message.from_user.first_name or "друг"
@@ -85,6 +88,5 @@ async def main():
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    # Запускаем Flask в фоне, чтобы Render видел открытый порт
     threading.Thread(target=run_flask, daemon=True).start()
     asyncio.run(main())
